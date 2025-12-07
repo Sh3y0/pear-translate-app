@@ -7,6 +7,128 @@
  * Built on the Pear framework.
  */
 
+import Hyperswarm from "hyperswarm";
+import Hyperdrive from "hyperdrive";
+import Localdrive from "localdrive";
+import Corestore from "corestore";
+import debounce from "debounceify";
+import b4a from "b4a";
+
+// ============================================================================
+// HYPERDRIVE LOGIC
+// ============================================================================
+
+// Global variables for Hyperdrive components
+let store = null;
+let swarm = null;
+let drive = null;
+let local = null;
+let isConnected = false;
+
+/**
+ * Updates the connection status message in the UI
+ * @param {string} message - Status message to display
+ * @param {string} type - Message type: 'info', 'success', 'error'
+ */
+function updateConnectionStatus(message, type = 'info') {
+  const statusElement = document.getElementById('connectionStatus');
+  if (statusElement) {
+    statusElement.textContent = message;
+    statusElement.className = `connection-status status-${type}`;
+    statusElement.style.display = 'block'; // Make sure it's visible
+  }
+  console.log(message);
+}
+
+/**
+ * Mirrors the remote Hyperdrive to local directory
+ * @returns {Promise<number>} Number of files mirrored
+ */
+async function mirrorDrive() {
+  updateConnectionStatus('Mirroring files from remote drive...', 'info');
+  const mirror = drive.mirror(local);
+  await mirror.done();
+  console.log('Finished mirroring:', mirror.count, 'files');
+  return mirror.count;
+}
+
+/**
+ * Connects to a Hyperdrive using the provided key
+ * @param {string} key - Hyperdrive public key (hex string)
+ * @returns {Promise<void>}
+ */
+async function connectToHyperdrive(key) {
+  try {
+    // Validate key format (should be hex string)
+    if (!key || typeof key !== 'string' || key.trim().length === 0) {
+      throw new Error('Invalid key: Key cannot be empty');
+    }
+
+    const trimmedKey = key.trim();
+    
+    // Basic hex validation (should be even length and only hex characters)
+    if (trimmedKey.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(trimmedKey)) {
+      throw new Error('Invalid key format: Key must be a valid hex string');
+    }
+
+    updateConnectionStatus('Initializing Corestore...', 'info');
+    
+    // Create a Corestore instance
+    store = new Corestore(Pear.config.storage);
+
+    updateConnectionStatus('Setting up Hyperswarm...', 'info');
+    
+    // Create Hyperswarm for peer discovery
+    swarm = new Hyperswarm();
+    Pear.teardown(() => swarm.destroy());
+
+    // Set up replication on connection with other peers
+    swarm.on('connection', (conn) => store.replicate(conn));
+
+    updateConnectionStatus('Creating local drive...', 'info');
+    
+    // Create a local copy of the remote drive
+    local = new Localdrive('./lang-models-dir');
+
+    updateConnectionStatus('Connecting to Hyperdrive...', 'info');
+    
+    // Create a hyperdrive using the provided public key
+    drive = new Hyperdrive(store, b4a.from(trimmedKey, 'hex'));
+
+    // Wait till all the properties of the drive are initialized
+    await drive.ready();
+
+    updateConnectionStatus('Joining swarm...', 'info');
+    
+    // Set up debounced mirror function
+    const debouncedMirror = debounce(mirrorDrive);
+
+    // Call the mirror function whenever content gets appended
+    drive.core.on('append', debouncedMirror);
+
+    const foundPeers = store.findingPeers();
+
+    // Join the swarm topic
+    swarm.join(drive.discoveryKey, { client: true, server: false });
+    await swarm.flush();
+    foundPeers();
+
+    updateConnectionStatus('Retrieving files...', 'info');
+    
+    // Start the mirroring process
+    const fileCount = await mirrorDrive();
+
+    isConnected = true;
+    updateConnectionStatus(`✅ Connected! Retrieved ${fileCount} file(s).`, 'success');
+    
+    return fileCount;
+  } catch (error) {
+    console.error('Error connecting to Hyperdrive:', error);
+    throw error;
+  }
+}
+
+
 // ============================================================================
 // TRANSLATION DATA
 // ============================================================================
@@ -137,6 +259,99 @@ async function performTranslation(text, fromLang, toLang) {
 // ============================================================================
 
 /**
+ * Enables or disables the translation form
+ * @param {boolean} enabled - Whether to enable the form
+ */
+function setTranslationFormEnabled(enabled) {
+  const sourceLang = document.getElementById('sourceLang');
+  const targetLang = document.getElementById('targetLang');
+  const inputText = document.getElementById('inputText');
+  const translateBtn = document.getElementById('translateBtn');
+  
+  sourceLang.disabled = !enabled;
+  targetLang.disabled = !enabled;
+  inputText.disabled = !enabled;
+  translateBtn.disabled = !enabled;
+  
+  // Add visual indication
+  const container = document.querySelector('.translation-container');
+  if (container) {
+    if (enabled) {
+      container.classList.remove('disabled');
+    } else {
+      container.classList.add('disabled');
+    }
+  }
+}
+
+/**
+ * Shows or hides the loading indicator
+ * @param {boolean} show - Whether to show the loading indicator
+ */
+function setLoadingIndicator(show) {
+  const loader = document.getElementById('loadingIndicator');
+  if (loader) {
+    loader.style.display = show ? 'block' : 'none';
+  }
+}
+
+/**
+ * Handles the connect button click event
+ * Connects to Hyperdrive and retrieves translation files
+ */
+async function handleConnect() {
+  const keyInput = document.getElementById('hyperdriveKey');
+  const connectBtn = document.getElementById('connectBtn');
+  const key = keyInput.value.trim();
+  
+  // Validate key input
+  if (!key) {
+    updateConnectionStatus('❌ Please enter a Hyperdrive key', 'error');
+    return;
+  }
+  
+  // Disable connect button and show loading
+  connectBtn.disabled = true;
+  setLoadingIndicator(true);
+  updateConnectionStatus('Connecting...', 'info');
+  
+  try {
+    // Connect to Hyperdrive and retrieve files
+    await connectToHyperdrive(key);
+    
+    // Hide the connection section
+    const connectionSection = document.getElementById('connectionSection');
+    if (connectionSection) {
+      connectionSection.style.display = 'none';
+    }
+    
+    // Enable the translation form
+    setTranslationFormEnabled(true);
+    
+    // Load translations from the retrieved files
+    updateConnectionStatus('Loading translation data...', 'info');
+    const translations = await loadTranslations();
+    
+    if (translations) {
+      updateConnectionStatus('✅ Ready to translate!', 'success');
+    } else {
+      updateConnectionStatus('⚠️ Connected but translation file not found', 'error');
+      alert('Translation file was not found in the retrieved data. Please check the Hyperdrive key.');
+    }
+    
+  } catch (error) {
+    console.error('Connection error:', error);
+    updateConnectionStatus(`❌ Connection failed: ${error.message}`, 'error');
+    alert(`Failed to connect to Hyperdrive:\n\n${error.message}\n\nPlease check the key and try again.`);
+    
+    // Re-enable connect button
+    connectBtn.disabled = false;
+  } finally {
+    setLoadingIndicator(false);
+  }
+}
+
+/**
  * Updates the output display with the given text and optional CSS class
  *
  * @param {string} text - The text to display
@@ -212,29 +427,50 @@ async function handleTranslate() {
 
 /**
  * Initializes the application
- * Sets up event listeners and preloads translation data
+ * Sets up event listeners for connection and translation
  */
 async function initializeApp() {
   console.log('Initializing Pear Translate Application...');
 
-  // Preload translations
-  await loadTranslations();
+  // Disable translation form initially (will be enabled after Hyperdrive connection)
+  setTranslationFormEnabled(false);
+
+  // Set up connect button event listener
+  const connectBtn = document.getElementById('connectBtn');
+  if (connectBtn) {
+    connectBtn.addEventListener('click', handleConnect);
+  }
 
   // Set up translate button event listener
   const translateBtn = document.getElementById('translateBtn');
-  translateBtn.addEventListener('click', handleTranslate);
+  if (translateBtn) {
+    translateBtn.addEventListener('click', handleTranslate);
+  }
 
   // Allow translation on Enter key press in textarea
   const inputText = document.getElementById('inputText');
-  inputText.addEventListener('keydown', (event) => {
-    // Check for Ctrl+Enter or Cmd+Enter to trigger translation
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      handleTranslate();
-    }
-  });
+  if (inputText) {
+    inputText.addEventListener('keydown', (event) => {
+      // Check for Ctrl+Enter or Cmd+Enter to trigger translation
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        handleTranslate();
+      }
+    });
+  }
 
-  console.log('Application initialized successfully');
+  // Allow Enter key to trigger connect
+  const keyInput = document.getElementById('hyperdriveKey');
+  if (keyInput) {
+    keyInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleConnect();
+      }
+    });
+  }
+
+  console.log('Application initialized. Please enter a Hyperdrive key to connect.');
 }
 
 // Start the application when the DOM is ready

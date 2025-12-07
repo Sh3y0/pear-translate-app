@@ -20,7 +20,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 35px;
         }
 
         .container {
@@ -188,6 +188,149 @@
             margin-top: 14px;
             margin-left: 12px;
         }
+
+        /* Connection Section Styles */
+        .connection-section {
+            background: #f8f9fa;
+            border: 2px dashed #667eea;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .connection-section h2 {
+            color: #333;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+        }
+
+        .connection-section p {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+        }
+
+        .key-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        #hyperdriveKey {
+            flex: 3;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: 'Courier New', monospace;
+            height: 44px;
+            box-sizing: border-box;
+        }
+
+        #hyperdriveKey:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        #connectBtn {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            white-space: nowrap;
+            flex: 1;
+        }
+
+        #connectBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #connectBtn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Loading Indicator */
+        .loading-indicator {
+            display: none;
+            margin: 15px 0;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Connection Status */
+        .connection-status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .status-info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status-success {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .status-error {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+
+        /* Disabled Translation Form */
+        .translation-container.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .translation-container.disabled::after {
+            content: '🔒 Connect to Hyperdrive to enable translation';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            font-weight: 600;
+            color: #666;
+            z-index: 10;
+        }
+
+        .translation-container {
+            position: relative;
+        }
     </style>
 </head>
 
@@ -196,41 +339,63 @@
     <div class="container">
         <h1>🌐 Pear Translate</h1>
 
-        <!-- Language selection: From and To -->
-        <div class="language-selectors">
-            <div class="language-group">
-                <label for="sourceLang">From:</label>
-                <select id="sourceLang">
-                    <option value="en">English</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                </select>
+        <!-- Hyperdrive Connection Section -->
+        <div id="connectionSection" class="connection-section">
+            <h2>🔗 Connect to Hyperdrive</h2>
+            <p>Enter a Hyperdrive key to retrieve translation files from the peer-to-peer network</p>
+
+            <div class="key-input-group">
+                <input type="text" id="hyperdriveKey" placeholder="Enter Hyperdrive key (hex format)" autocomplete="off"
+                    spellcheck="false" />
+                <button id="connectBtn">Connect</button>
             </div>
-            <div class="arrow">→</div>
-            <div class="language-group">
-                <label for="targetLang">To:</label>
-                <select id="targetLang">
-                    <option value="es">Spanish</option>
-                    <option value="en">English</option>
-                    <option value="fr">French</option>
-                </select>
+
+            <div id="loadingIndicator" class="loading-indicator">
+                <div class="spinner"></div>
+            </div>
+
+            <div id="connectionStatus" class="connection-status status-info" style="display: none;"></div>
+        </div>
+
+        <!-- Translation Form (disabled initially) -->
+        <div class="translation-container">
+            <!-- Language selection: From and To -->
+            <div class="language-selectors">
+                <div class="language-group">
+                    <label for="sourceLang">From:</label>
+                    <select id="sourceLang">
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                    </select>
+                </div>
+                <div class="arrow">→</div>
+                <div class="language-group">
+                    <label for="targetLang">To:</label>
+                    <select id="targetLang">
+                        <option value="es">Spanish</option>
+                        <option value="en">English</option>
+                        <option value="fr">French</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Text input area -->
+            <div class="input-section">
+                <label for="inputText">Text to translate:</label>
+                <textarea id="inputText" placeholder="Enter text to translate..."></textarea>
+            </div>
+
+            <!-- Translate button -->
+            <button id="translateBtn">Translate</button>
+
+            <!-- Translation output -->
+            <div class="output-section">
+                <label class="output-label">Translation:</label>
+                <div id="outputText">Your translation will appear here...</div>
             </div>
         </div>
-
-        <!-- Text input area -->
-        <div class="input-section">
-            <label for="inputText">Text to translate:</label>
-            <textarea id="inputText" placeholder="Enter text to translate..."></textarea>
-        </div>
-
-        <!-- Translate button -->
-        <button id="translateBtn">Translate</button>
-
-        <!-- Translation output -->
-        <div class="output-section">
-            <label class="output-label">Translation:</label>
-            <div id="outputText">Your translation will appear here...</div>
-        </div>
+        <!-- End of translation-container -->
     </div>
 
     <!-- Load the main application script -->

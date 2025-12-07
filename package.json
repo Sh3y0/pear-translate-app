@@ -19,5 +19,13 @@
     "brittle": "^3.0.0",
     "pear-interface": "^1.0.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "b4a": "^1.7.3",
+    "corestore": "^7.7.0",
+    "debounceify": "^1.1.0",
+    "hyperdrive": "^13.0.2",
+    "hyperswarm": "^4.16.0",
+    "localdrive": "^2.2.0",
+    "pear-stdio": "^1.0.1"
+  }
 }
