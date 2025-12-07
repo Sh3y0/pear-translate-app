@@ -50,7 +50,6 @@ pear run -d .
 pear-translate/
 ├── index.html          # Main HTML interface
 ├── index.js            # Application logic with Hyperdrive integration
-├── translations.json   # Mock translation data
 ├── package.json        # Dependencies and scripts
 └── README.md           # This file
 ```
