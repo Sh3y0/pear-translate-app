@@ -33,7 +33,7 @@ npm start
 Or directly with Pear:
 
 ```bash
-pear run --dev .
+pear run -d .
 ```
 
 ## How It Works
